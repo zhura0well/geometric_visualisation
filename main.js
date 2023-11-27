@@ -9,6 +9,18 @@ function deg2rad(angle) {
     return angle * Math.PI / 180;
 }
 
+function processSurfaceEquations(u, v) {
+    // constant variables for equations
+    const A = 0.3;
+    const B = 0.3;
+    const C = 0.15;
+    const x = A * deg2rad(u) * Math.sin(deg2rad(u)) * Math.cos(deg2rad(v));
+    const y = B * deg2rad(u) * Math.cos(deg2rad(u)) * Math.cos(deg2rad(v));
+    const z = -C * deg2rad(u) * Math.sin(deg2rad(v));
+    return { x, y, z };
+
+}
+
 
 // Constructor
 function Model(name) {
@@ -30,7 +42,10 @@ function Model(name) {
         gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iAttribVertex);
    
-        gl.drawArrays(gl.LINE_STRIP, 0, this.count);
+        const step = 15;
+        for (let i = 0; i < this.count; i += step) { // draw each line using 15 points
+            gl.drawArrays(gl.LINE_STRIP, i, step + 1); 
+        }
     }
 }
 
@@ -90,10 +105,22 @@ function CreateSurfaceData()
 {
     let vertexList = [];
 
-    for (let i=0; i<360; i+=5) {
-        vertexList.push( Math.sin(deg2rad(i)), 1, Math.cos(deg2rad(i)) );
-        vertexList.push( Math.sin(deg2rad(i)), 0, Math.cos(deg2rad(i)) );
+    // 0 <= u <= 2PI, -PI <= v <= PI
+    const innerStep = 5;
+    for (let i = 0; i <= 360; i+=innerStep) {
+        for (let j = -180; j <= 180; j+=innerStep) {
+            const { x, y, z } = processSurfaceEquations(i, j);
+            vertexList.push(x, y, z);
+        }
     }
+
+    for (let i = -180; i <= 180; i+=innerStep) {
+        for (let j = 0; j <= 360; j+=innerStep) {
+            const { x, y, z } = processSurfaceEquations(j, i);
+            vertexList.push(x, y, z);
+        }
+    }
+
 
     return vertexList;
 }
