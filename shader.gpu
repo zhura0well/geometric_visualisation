@@ -46,5 +46,8 @@ void main() {
     float light = inLight * dot(N, toLight);
     float specular = inLight * pow(dot(N, halfVector), 100.0);
     gl_FragColor = vec4(color.rgb*light+specular,1.0);
-    //gl_FragColor = vec4(N,1.0);
+    if (focus > 99.0) {
+        gl_FragColor = vec4(1.0);
+    }
+    
 }`;
