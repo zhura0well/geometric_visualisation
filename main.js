@@ -6,6 +6,8 @@ let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
 let lightSphere;
 let lightLine;
+let moveU = 0.9;
+let moveV = 0.2;
 
 function deg2rad(angle) {
     return angle * Math.PI / 180;
@@ -28,6 +30,29 @@ function addListeners() {
             });
         });
     })
+
+    window.addEventListener('keydown', (e) => {
+        switch(e.code) {
+            case "KeyA": 
+                moveV = Math.max(moveV - 0.01, 0);
+                break;
+
+            case "KeyD": 
+                moveV = Math.min(moveV + 0.01, 1);
+                break;
+
+            case "KeyW":
+                moveU = Math.min(moveU + 0.01, 1);
+                break;
+
+            case "KeyS":
+                moveU = Math.max(moveU - 0.01, 0);
+                break;
+
+            default:
+                break;
+        }
+    })
 }
 addListeners();
 
@@ -36,7 +61,6 @@ function updateConstants() {
     B = document.getElementById('b').value;
     C = document.getElementById('c').value;
 }
-
 
 function processSurfaceEquations(u, v) {
     const x = A * deg2rad(u) * Math.sin(deg2rad(u)) * Math.cos(deg2rad(v));
@@ -51,6 +75,7 @@ function Model(name) {
     this.name = name;
     this.iVertexBuffer = gl.createBuffer();
     this.iNormalBuffer = gl.createBuffer();
+    this.iTextureBuffer = gl.createBuffer();
     this.count = 0;
 
     this.BufferData = function(vertices) {
@@ -67,6 +92,12 @@ function Model(name) {
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
     }
 
+    this.SetTextureBuffer = function (vertices) {
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTextureBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
+    }
+
     this.Draw = function() {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
@@ -77,17 +108,13 @@ function Model(name) {
         gl.vertexAttribPointer(shProgram.iAttribNormal, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iAttribNormal);
 
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTextureBuffer);
+        gl.vertexAttribPointer(shProgram.iAttribTexture, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shProgram.iAttribTexture);
+
         gl.drawArrays(gl.TRIANGLES, 0, this.count);
     }
 
-    this.DrawV = function () {
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
-        gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(shProgram.iAttribVertex);
-
-        gl.drawArrays(gl.LINE_STRIP, 0, this.count);
-    }
 }
 
 
@@ -147,24 +174,24 @@ function draw() {
     let C = document.getElementById('c').value
 
     let z = document.getElementById('z').value
-    gl.uniform3fv(shProgram.iLightPosition, [1.2 * Math.cos(Date.now() * 0.001), 1.2 * Math.sin(Date.now() * 0.001), z]);
+    gl.uniform3fv(shProgram.iLightPosition, [Math.cos(Date.now() * 0.001), Math.sin(Date.now() * 0.001), z]);
 
-    gl.uniform3fv(shProgram.iLightDirection, [-1.2 * Math.cos(Date.now() * 0.001), -1.2 * Math.sin(Date.now() * 0.001), -z]);
+    gl.uniform3fv(shProgram.iLightDirection, [-Math.cos(Date.now() * 0.001), -Math.sin(Date.now() * 0.001), -z]);
     let f = document.getElementById('f').value
     let r = document.getElementById('r').value
+    let s = document.getElementById('s').value
     gl.uniform1f(shProgram.iRange, r);
     gl.uniform1f(shProgram.iFocus, f);
+    gl.uniform1f(shProgram.iScale, s);
+    gl.uniform2fv(shProgram.iTranslateTo, [moveU, moveV])
 
     surface.Draw();
-
-    gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false,
-        m4.multiply(
-            modelViewProjection,
-            m4.translation(1.2 * Math.cos(Date.now() * 0.001), 1.2 * Math.sin(Date.now() * 0.001), z)));
     gl.uniform1f(shProgram.iFocus, 100);
+
+    let translate = processSurfaceEquations(moveU * 360, (moveV - 0.5) * 360)
+    gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, m4.multiply(modelViewProjection,
+        m4.translation(translate.x, translate.y, translate.z)));
     lightSphere.Draw();
-    lightLine.BufferData([0, 0, 0, -1.2 * Math.cos(Date.now() * 0.001), -1.2 * Math.sin(Date.now() * 0.001), -z]);
-    lightLine.DrawV()
 }
 
 function drawUsingAnimFrame() {
@@ -210,6 +237,7 @@ function CreateSurfaceData()
 {
     let vertexList = [];
     let normalsList = [];
+    let texturesList = [];
 
     // 0 <= u <= 2PI, -PI <= v <= PI
     const innerStep = 5;
@@ -231,11 +259,17 @@ function CreateSurfaceData()
             vertexList.push(x1, y1, z1);
             vertexList.push(x3, y3, z3);
             normalsList.push(...n, ...n1, ...n2, ...n2, ...n1, ...n3);
+            texturesList.push(j / 360, i / 360 + 0.5);
+            texturesList.push((j + innerStep) / 360, i / 360 + 0.5);
+            texturesList.push(j / 360, (i + innerStep) / 360 + 0.5);
+            texturesList.push(j / 360, (i + innerStep) / 360 + 0.5);
+            texturesList.push((j + innerStep) / 360, i / 360 + 0.5);
+            texturesList.push((j + innerStep) / 360, (i + innerStep) / 360 + 0.5);
         }
     }
 
 
-    return { vertexList, normalsList };
+    return { vertexList, normalsList, texturesList };
 }
 
 function getNormal(j, i) {
@@ -249,6 +283,30 @@ function getNormal(j, i) {
     return normal;
 }
 
+function loadAndBindTexture() {
+    let texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    const image = new Image();
+    image.setAttribute('Access-Control-Allow-Origin', '*')
+    image.crossOrigin = 'crossorigin'
+    image.src = "https://raw.githubusercontent.com/zhura0well/geometric_visualisation/CGW/assets/test.jpg";
+    image.onload = () => {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            image
+        );
+        draw();
+    }
+}
+
 
 /* Initialize the WebGL context. Called from init() */
 function initGL() {
@@ -259,24 +317,28 @@ function initGL() {
 
     shProgram.iAttribVertex              = gl.getAttribLocation(prog, "vertex");
     shProgram.iAttribNormal              = gl.getAttribLocation(prog, "normal");
+    shProgram.iAttribTexture             = gl.getAttribLocation(prog, "texture");
     shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
     shProgram.iColor                     = gl.getUniformLocation(prog, "color");
-
+    
+    shProgram.iScale                     = gl.getUniformLocation(prog, "scale");
+    shProgram.iTranslateTo               = gl.getUniformLocation(prog, "translationVar");
     shProgram.iLightPosition             = gl.getUniformLocation(prog, "lightPosition");
     shProgram.iLightDirection            = gl.getUniformLocation(prog, "lightDirection");
     shProgram.iRange                     = gl.getUniformLocation(prog, "range");
     shProgram.iFocus                     = gl.getUniformLocation(prog, "focus");
 
     surface = new Model('Surface');
-    const { vertexList, normalsList } = CreateSurfaceData()
+    const { vertexList, normalsList, texturesList } = CreateSurfaceData()
     surface.BufferData(vertexList);
     surface.SetNormalBuffer(normalsList);
+    surface.SetTextureBuffer(texturesList);
 
     lightSphere = new Model('Surface');
     lightSphere.BufferData(CreateSphereData());
     lightSphere.SetNormalBuffer(CreateSphereData());
-    lightLine = new Model('Surface');
-    lightLine.BufferData([0, 0, 0, 1, 1, 1]);
+    lightSphere.SetNormalBuffer(CreateSphereData());
+    lightSphere.SetTextureBuffer(CreateSphereData());
 
     gl.enable(gl.DEPTH_TEST);
 }
@@ -322,6 +384,7 @@ function init() {
     try {
         canvas = document.getElementById("webglcanvas");
         gl = canvas.getContext("webgl");
+        loadAndBindTexture();
         if ( ! gl ) {
             throw "Browser does not support WebGL";
         }
